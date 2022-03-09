@@ -47,7 +47,7 @@ def generate_labels(frame):
 
     annotations['obj_ids'] = np.array(obj_ids)
     annotations['tracking_difficulty'] = np.array(tracking_difficulty)
-    annotations['num_points_in_gt'] = np.array(num_points_in_gt)
+    annotations['num_points_in_gt'] = np.array(num_points_in_gt) #TODO: change this
 
     annotations = common_utils.drop_info_with_name(annotations, name='unknown')
     if annotations['name'].__len__() > 0:
@@ -188,6 +188,7 @@ def process_single_sequence(sequence_file, save_path, sampled_interval, has_labe
         print('Skip sequence since it has been processed before: %s' % pkl_file)
         return sequence_infos
 
+    # data corresponds to one frame in a sequence
     for cnt, data in enumerate(dataset):
         if cnt % sampled_interval != 0:
             continue
@@ -209,13 +210,15 @@ def process_single_sequence(sequence_file, save_path, sampled_interval, has_labe
 
         pose = np.array(frame.pose.transform, dtype=np.float32).reshape(4, 4)
         info['pose'] = pose
+        info['stats'] = frame.context.stats
+        #print(info['stats'].weather, info['stats'].location) 
 
         if has_label:
             annotations = generate_labels(frame)
             info['annos'] = annotations
 
         num_points_of_each_lidar = save_lidar_points(frame, cur_save_dir / ('%04d.npy' % cnt))
-        info['num_points_of_each_lidar'] = num_points_of_each_lidar
+        info['num_points_of_each_lidar'] = num_points_of_each_lidar #TODO: change this for noisy point cloud
 
         sequence_infos.append(info)
 
