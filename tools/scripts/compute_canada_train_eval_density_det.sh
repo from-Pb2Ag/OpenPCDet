@@ -32,8 +32,10 @@ DATA_DIR_KITTI=/home/$USER/projects/def-swasland-ab/Datasets/Kitti
 INFOS_DIR_KITTI=data/kitti
 
 # ========== WAYMO ==========
-DATA_DIR_WAYMO=/home/$USER/projects/rrg-swasland/Datasets/waymo-0000
-INFOS_DIR_WAYMO=/home/$USER/projects/rrg-swasland/Datasets/waymo-0000/Infos
+#/home/$USER/projects/rrg-swasland/Datasets/waymo-0000
+#/home/$USER/projects/rrg-swasland/Datasets/waymo-0000/Infos
+DATA_DIR_WAYMO= /home/$USER/projects/def-swasland-ab/Datasets/Waymo
+INFOS_DIR_WAYMO= /home/$USER/projects/def-swasland-ab/Datasets/Waymo/Infos
 
 # Additional parameters
 DATASET=kitti
