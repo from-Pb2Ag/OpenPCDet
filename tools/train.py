@@ -17,6 +17,10 @@ from pcdet.utils import common_utils
 from train_utils.optimization import build_optimizer, build_scheduler
 from train_utils.train_utils import train_model
 
+def none_or_str(value):
+    if value == 'None':
+        return None
+    return value
 
 def parse_config():
     parser = argparse.ArgumentParser(description='arg parser')
@@ -26,8 +30,8 @@ def parse_config():
     parser.add_argument('--epochs', type=int, default=None, required=False, help='number of epochs to train for')
     parser.add_argument('--workers', type=int, default=8, help='number of workers for dataloader')
     parser.add_argument('--extra_tag', type=str, default='default', help='extra tag for this experiment')
-    parser.add_argument('--ckpt', type=str, default=None, help='checkpoint to start from')
-    parser.add_argument('--pretrained_model', type=str, default=None, help='pretrained_model')
+    parser.add_argument('--ckpt', type=str, default=none_or_str, help='checkpoint to start from')
+    parser.add_argument('--pretrained_model', type=none_or_str, default=None, help='pretrained_model')
     parser.add_argument('--launcher', choices=['none', 'pytorch', 'slurm'], default='none')
     parser.add_argument('--tcp_port', type=int, default=18888, help='tcp port for distrbuted training')
     parser.add_argument('--sync_bn', action='store_true', default=False, help='whether to use sync bn')
@@ -122,10 +126,10 @@ def main():
     # load checkpoint if it is possible
     start_epoch = it = 0
     last_epoch = -1
-    if args.pretrained_model is not None or args.pretrained_model != 'None':
+    if args.pretrained_model is not None:
         model.load_params_from_file(filename=args.pretrained_model, to_cpu=dist, logger=logger)
 
-    if args.ckpt is not None or args.ckpt != 'None':
+    if args.ckpt is not None:
         it, start_epoch = model.load_params_with_optimizer(args.ckpt, to_cpu=dist, optimizer=optimizer, logger=logger)
         last_epoch = start_epoch + 1
     else:
