@@ -122,10 +122,10 @@ def main():
     # load checkpoint if it is possible
     start_epoch = it = 0
     last_epoch = -1
-    if args.pretrained_model is not None:
+    if args.pretrained_model is not None or args.pretrained_model != 'None':
         model.load_params_from_file(filename=args.pretrained_model, to_cpu=dist, logger=logger)
 
-    if args.ckpt is not None:
+    if args.ckpt is not None or args.ckpt != 'None':
         it, start_epoch = model.load_params_with_optimizer(args.ckpt, to_cpu=dist, optimizer=optimizer, logger=logger)
         last_epoch = start_epoch + 1
     else:
