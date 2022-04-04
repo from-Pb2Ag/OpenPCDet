@@ -1,5 +1,5 @@
 DATASET: 'WaymoDataset'
-DATA_PATH: '/media/barza/WD_BLACK/datasets/waymo'
+DATA_PATH: '../data/waymo'
 PROCESSED_DATA_TAG: 'waymo_processed_train_sim_rain_val_da_10'
 
 POINT_CLOUD_RANGE: [-75.2, -75.2, -2, 75.2, 75.2, 4]
