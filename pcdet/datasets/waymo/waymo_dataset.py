@@ -7,6 +7,7 @@ import os
 import pickle
 import copy
 import shutil
+import glob
 
 import numpy as np
 import torch
@@ -16,6 +17,9 @@ from pathlib import Path
 from ...ops.roiaware_pool3d import roiaware_pool3d_utils
 from ...utils import box_utils, common_utils
 from ..dataset import DatasetTemplate
+from ..simulator.vis import open3d_vis_utils as V
+from ..simulator.atmos_models import LISA
+from ..simulator.simulate_rain_waymo import *
 
 
 class WaymoDataset(DatasetTemplate):
@@ -71,6 +75,8 @@ class WaymoDataset(DatasetTemplate):
 
     @staticmethod
     def check_sequence_name_with_all_version(sequence_file):
+        if 'sim_rain' in str(sequence_file):
+            return sequence_file
         if '_with_camera_labels' not in str(sequence_file) and not sequence_file.exists():
             sequence_file = Path(str(sequence_file[:-9]) + '_with_camera_labels.tfrecord')
         if '_with_camera_labels' in str(sequence_file) and not sequence_file.exists():
@@ -107,7 +113,8 @@ class WaymoDataset(DatasetTemplate):
 
         points_all, NLZ_flag = point_features[:, 0:5], point_features[:, 5]
         points_all = points_all[NLZ_flag == -1]
-        points_all[:, 3] = np.tanh(points_all[:, 3])
+        if 'sim_rain' not in sequence_name:
+            points_all[:, 3] = np.tanh(points_all[:, 3])
         return points_all
 
     def __len__(self):
@@ -224,6 +231,47 @@ class WaymoDataset(DatasetTemplate):
             )
             return ap_result_str, ap_dict
 
+        # def waymo_eval(eval_det_annos, eval_gt_annos, eval_levels_list_cfg=None):
+        #     from .waymo_eval import OpenPCDetWaymoDetectionMetricsEstimator
+        #     eval = OpenPCDetWaymoDetectionMetricsEstimator()
+        # 
+        #     # Overall Evaluation
+        #     ap_dict = eval.waymo_evaluation(
+        #         eval_det_annos, eval_gt_annos, class_name=class_names,
+        #         distance_thresh=1000, fake_gt_infos=self.dataset_cfg.get('INFO_WITH_FAKELIDAR', False)
+        #     )
+        #     ap_result_str = '\n'
+        #     for key in ap_dict:
+        #         ap_dict[key] = ap_dict[key][0]
+        #         ap_result_str += '%s: %.4f \n' % (key, ap_dict[key])
+        # 
+        #     # Evaluation across range
+        #     if eval_levels_list_cfg:
+        #         ap_result_str_list, ap_dict_list = [], []
+        #         ap_result_str_list.append(ap_result_str)
+        #         ap_dict_list.append(ap_dict)
+        # 
+        #         for i in range(len(eval_levels_list_cfg['RANGE_LIST']) - 1):
+        #             lower_bound, upper_bound = eval_levels_list_cfg['RANGE_LIST'][i], \
+        #                                        eval_levels_list_cfg['RANGE_LIST'][i + 1]
+        # 
+        #             ap_dict = eval.waymo_evaluation(
+        #                 eval_det_annos, eval_gt_annos, class_name=class_names,
+        #                 distance_thresh=upper_bound, lower_bound=lower_bound,
+        #                 fake_gt_infos=self.dataset_cfg.get('INFO_WITH_FAKELIDAR', False)
+        #             )
+        #             ap_result_str = '\n'
+        #             for key in ap_dict:
+        #                 ap_dict[key] = ap_dict[key][0]
+        #                 ap_result_str += '%s: %.4f \n' % (key, ap_dict[key])
+        # 
+        #             ap_result_str_list.append(ap_result_str)
+        #             ap_dict_list.append(ap_dict)
+        # 
+        #         return ap_result_str_list, ap_dict_list
+        # 
+        #     return ap_result_str, ap_dict
+
         def waymo_eval(eval_det_annos, eval_gt_annos):
             from .waymo_eval import OpenPCDetWaymoDetectionMetricsEstimator
             eval = OpenPCDetWaymoDetectionMetricsEstimator()
@@ -283,14 +331,6 @@ class WaymoDataset(DatasetTemplate):
                 torch.from_numpy(gt_boxes[:, 0:7]).unsqueeze(dim=0).float().cuda()
             ).long().squeeze(dim=0).cpu().numpy()
 
-
-            seq_dict_path = Path(save_path / processed_data_tag / sequence_name / (sequence_name + '.pkl'))
-            if not seq_dict_path.exists():
-                original_clear_weather_path = Path(save_path / "waymo_processed_data" / sequence_name / (sequence_name + '.pkl'))
-                shutil.copyfile(original_clear_weather_path, seq_dict_path)
-            with open(seq_dict_path, 'rb') as f:
-                seq_dict = pickle.load(f)
-
             for i in range(num_obj):
                 filename = '%s_%04d_%s_%d.bin' % (sequence_name, sample_idx, names[i], i)
                 filepath = database_save_path / filename
@@ -305,25 +345,18 @@ class WaymoDataset(DatasetTemplate):
                     db_info = {'name': names[i], 'path': db_path, 'sequence_name': sequence_name,
                                'sample_idx': sample_idx, 'gt_idx': i, 'box3d_lidar': gt_boxes[i],
                                'num_points_in_gt': gt_points.shape[0], 'difficulty': difficulty[i]}
-                    infos[k]['annos']['num_points_in_gt'][i] = gt_points.shape[0]
-                    seq_dict[sample_idx]['annos']['num_points_in_gt'][i] = gt_points.shape[0]
+
                     if names[i] in all_db_infos:
                         all_db_infos[names[i]].append(db_info)
                     else:
                         all_db_infos[names[i]] = [db_info]
-            
-            # Update num_points_in_gt in processed seq pkl
-            with open(seq_dict_path, 'wb') as f:
-                pickle.dump(seq_dict, f)
+
         for k, v in all_db_infos.items():
             print('Database %s: %d' % (k, len(v)))
 
         with open(db_info_save_path, 'wb') as f:
             pickle.dump(all_db_infos, f)
-        
-        # Update num_points_in_gt in waymo_infos_train.pkl
-        with open(info_path, 'wb') as f:
-            pickle.dump(infos, f)
+
         
 
 
@@ -338,19 +371,19 @@ def create_waymo_infos(dataset_cfg, class_names, data_path, save_path,
 
     train_filename = save_path / ('waymo_infos_%s.pkl' % train_split)
     val_filename = save_path / ('waymo_infos_%s.pkl' % val_split)
-    # 
-    # print('---------------Start to generate data infos---------------')
-    # 
-    # dataset.set_split(train_split)
-    # waymo_infos_train = dataset.get_infos(
-    #     raw_data_path=data_path / raw_data_tag,
-    #     save_path=save_path / processed_data_tag, num_workers=workers, has_label=True,
-    #     sampled_interval=1
-    # )
-    # with open(train_filename, 'wb') as f:
-    #     pickle.dump(waymo_infos_train, f)
-    # print('----------------Waymo info train file is saved to %s----------------' % train_filename)
-    # 
+
+    print('---------------Start to generate data infos---------------')
+
+    dataset.set_split(train_split)
+    waymo_infos_train = dataset.get_infos(
+        raw_data_path=data_path / raw_data_tag,
+        save_path=save_path / processed_data_tag, num_workers=workers, has_label=True,
+        sampled_interval=1
+    )
+    with open(train_filename, 'wb') as f:
+        pickle.dump(waymo_infos_train, f)
+    print('----------------Waymo info train file is saved to %s----------------' % train_filename)
+    #
     # dataset.set_split(val_split)
     # waymo_infos_val = dataset.get_infos(
     #     raw_data_path=data_path / raw_data_tag,
@@ -362,18 +395,138 @@ def create_waymo_infos(dataset_cfg, class_names, data_path, save_path,
     # print('----------------Waymo info val file is saved to %s----------------' % val_filename)
 
     print('---------------Start create groundtruth database for data augmentation---------------')
-    # dataset.set_split(train_split)
-    # dataset.create_groundtruth_database(
-    #     info_path=train_filename, save_path=save_path, split=train_split, sampled_interval=10,
-    #     used_classes=['Vehicle', 'Pedestrian', 'Cyclist'], processed_data_tag=processed_data_tag
-    # )
-    #
-    dataset.set_split(val_split)
+    dataset.set_split(train_split)
     dataset.create_groundtruth_database(
-        info_path=val_filename, save_path=save_path, split=val_split, sampled_interval=10,
+        info_path=train_filename, save_path=save_path, split=train_split, sampled_interval=10,
         used_classes=['Vehicle', 'Pedestrian', 'Cyclist'], processed_data_tag=processed_data_tag
     )
-    print('---------------Data preparation Done---------------')
+
+    # print('---------------Data preparation Done---------------')
+
+def simulate_rain(clear_weather_split, sim_percent, sim_data_tag, data_path, processed_data_tag):
+    simulator = LISA(rmax=200)
+    rain_rates = np.linspace(0.5, 10.0, 20)
+    
+    data_save_path = data_path / 'rainy_processed_data'
+    data_save_path.mkdir(parents=True, exist_ok=True)
+    clear_data_path = data_path / processed_data_tag
+
+    for split, percent in zip(clear_weather_split, sim_percent):
+        split_dir = data_path / 'ImageSets' / (split + '.txt')
+        clear_sequence_list = [x.strip() for x in open(split_dir).readlines()]
+        sim_upto_len = int(percent * len(clear_sequence_list))
+        #rainy_split = split + '_' + sim_data_tag
+
+        # # Create train_rainy.txt (50% rainy and 50% clear) and val_rainy.txt
+        # dst_txt = data_path / 'ImageSets' / (rainy_split + '.txt')
+        # with open(dst_txt, 'w') as f:
+        #     for i in range(sim_upto_len):
+        #         seq_name = clear_sequence_list[i]
+        #         # create a rainy name for this seq
+        #         if '_with_camera_labels' in seq_name:
+        #             rain_seq_name = seq_name.split('_with_camera_labels')[
+        #                                 0] + '_' + sim_data_tag + '_with_camera_labels' + \
+        #                             seq_name.split('_with_camera_labels')[1]
+        #         else:
+        #             rain_seq_name = seq_name.split('.')[0] + '_' + sim_data_tag + seq_name.split('.')[1]
+        #
+        #         f.write(rain_seq_name)
+        #         if i != len(clear_sequence_list) - 1:
+        #             f.write('\n')
+        #     for i in range(sim_upto_len, len(clear_sequence_list)):
+        #         f.write(clear_sequence_list[i])
+        #         if i != len(clear_sequence_list) - 1:
+        #             f.write('\n')
+                    
+        
+        for i in tqdm(range(sim_upto_len)): #, desc='Number of sequences processed'
+            seq_name = clear_sequence_list[i].split('.')[0]
+            
+            # create a rainy name for this seq
+            if '_with_camera_labels' in seq_name:
+                rain_seq_name = seq_name.split('_with_camera_labels')[0] + '_' + sim_data_tag + '_with_camera_labels'
+            else:
+                rain_seq_name = seq_name.split('.')[0] + '_' + sim_data_tag
+
+            clear_seq_dir = clear_data_path / seq_name
+            rainy_seq_dir = data_save_path / rain_seq_name
+
+            # Copy clear processed seq into a new rainy seq dir
+            shutil.copytree(clear_seq_dir, rainy_seq_dir, dirs_exist_ok=True)
+            seq_info_path = rainy_seq_dir / (seq_name + '.pkl')
+            rainy_seq_info_path = rainy_seq_dir / (rain_seq_name + '.pkl')
+            with open(seq_info_path, 'rb') as f:
+                seq_infos = pickle.load(f)
+            
+            lidar_files = sorted(glob.glob(str(rainy_seq_dir) + "/*.npy"))
+            for file, info in tqdm(zip(lidar_files, seq_infos)): #, desc=f'Number of frames in one seq: {rain_seq_name}'
+                points = np.load(file)  # (N, 6): [x, y, z, intensity, elongation, NLZ_flag]
+                points[:,3] = np.tanh(points[:,3])
+                #genHistogram(points)
+                Rr = np.random.choice(rain_rates)
+                #print(f'Rain rate: {Rr}')
+                #Simulate Rain
+                noisy_pc = simulator.msu_rain(points[:, :4], Rr)  # augment_mc(points[:,:4], Rr)
+                if noisy_pc.max() == np.nan or noisy_pc.max() > 200:
+                    rows, cols = np.where(noisy_pc > 200)
+                    print(f'num outliers: {rows.shape[0]}')
+                    for row, col in zip(rows, cols):
+                        print(f'Row:{row}, Col:{col}, Value:{noisy_pc[row,col]}')
+                        if col != 3:
+                            c=1
+                #genHistogram(noisy_pc, Rr)
+                #b=1
+                
+                if False:
+                    # Add labels 0=lost, 1=scattered, 2=attenuated #(N, 7): [x, y, z, intensity, elongation, NLZ_flag, labels]
+                    save_points = np.concatenate((noisy_pc[:,:4], points[:,4:6], noisy_pc[:, 4].reshape(-1,1)), axis=1).astype(float32)
+                    np.save(Path(file), save_points)
+
+                    # # Check points
+                    # noisy_points = np.load(file)
+                    # norm = np.linalg.norm(save_points[:, :4] - noisy_points[:, :4], axis=1)
+                    # c=1
+
+                if False:
+                    lost_points = np.where(noisy_pc[:, 4] == 0)
+                    scattered_points = np.where(noisy_pc[:, 4] == 1)
+                    attenuated_points = np.where(noisy_pc[:, 4] == 2)
+                    
+                    noisy_pc[lost_points, :4] = points[lost_points, :4]
+                    V.draw_scenes(points=noisy_pc[:, :3], point_colors=get_colors(noisy_pc, color_feature=4))
+                    b=1
+
+                info['point_cloud']['lidar_sequence'] = rain_seq_name
+                info['frame_id'] = rain_seq_name + info['frame_id'][-4:] # seq_name + frame id (_000 to _198)
+                info['precipitation_rate'] = Rr
+                info['annos']['num_points_in_gt_clear'] = copy.deepcopy(info['annos']['num_points_in_gt'])
+
+
+                gt_boxes = info['annos']['gt_boxes_lidar']
+                num_obj = gt_boxes.shape[0]
+
+                box_idxs_of_pts = roiaware_pool3d_utils.points_in_boxes_gpu(
+                    torch.from_numpy(noisy_pc[:, 0:3]).unsqueeze(dim=0).float().cuda(),
+                    torch.from_numpy(gt_boxes[:, 0:7]).unsqueeze(dim=0).float().cuda()
+                ).long().squeeze(dim=0).cpu().numpy()
+
+                for i in range(num_obj):
+                    gt_points = noisy_pc[box_idxs_of_pts == i]
+                    # if gt_points.shape[0] > 0:
+                    #     print(gt_points[:, :3].max())
+                    # gt_points[:, :3] -= gt_boxes[i, :3]
+                    # if gt_points.shape[0] > 0:
+                    #     print(gt_points[:, :3].max())
+
+                    info['annos']['num_points_in_gt'][i] = gt_points.shape[0]
+
+            #print(f'-------Simulated {rain_seq_name}--------')
+            # with open(rainy_seq_info_path, 'wb') as f:
+            #     pickle.dump(seq_infos, f)
+
+            # Remove old seq_info
+            #seq_info_path.unlink()
+
 
 
 if __name__ == '__main__':
@@ -392,8 +545,17 @@ if __name__ == '__main__':
         create_waymo_infos(
             dataset_cfg=dataset_cfg,
             class_names=['Vehicle', 'Pedestrian', 'Cyclist'],
-            data_path=ROOT_DIR / 'data' / 'waymo',
-            save_path=ROOT_DIR / 'data' / 'waymo',
-            raw_data_tag='raw_data_0000',
+            data_path=Path('/media/barza/WD_BLACK/datasets/waymo'),
+            save_path=Path('/media/barza/WD_BLACK/datasets/waymo'),
+            raw_data_tag='raw_data',
             processed_data_tag=dataset_cfg.PROCESSED_DATA_TAG
         )
+    
+    if args.func == 'simulate_rain':
+        simulate_rain(
+            clear_weather_split = ['train_clear'],
+            sim_percent= [0.5],
+            sim_data_tag = 'sim_rain',
+            data_path=Path('/media/barza/WD_BLACK/datasets/waymo'),
+            processed_data_tag='waymo_processed_data_10')
+
