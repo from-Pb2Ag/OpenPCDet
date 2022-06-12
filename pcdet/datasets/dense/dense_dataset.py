@@ -557,11 +557,11 @@ def create_dense_infos(dataset_cfg, class_names, data_path, save_path, logger, w
 
     print('---------------Start to generate data infos---------------')
 
-    # dataset.set_split(train_split)
-    # dense_infos_train = dataset.get_infos(logger, num_workers=workers, has_label=True, count_inside_pts=True)
-    # with open(train_filename, 'wb') as f:
-    #     pickle.dump(dense_infos_train, f)
-    # print('Dense info train file is saved to %s' % train_filename)
+    dataset.set_split(train_split)
+    dense_infos_train = dataset.get_infos(logger, num_workers=workers, has_label=True, count_inside_pts=True)
+    with open(train_filename, 'wb') as f:
+        pickle.dump(dense_infos_train, f)
+    print('Dense info train file is saved to %s' % train_filename)
 
     dataset.set_split(val_split)
     dense_infos_val = dataset.get_infos(logger, num_workers=workers, has_label=True, count_inside_pts=True)
@@ -569,15 +569,15 @@ def create_dense_infos(dataset_cfg, class_names, data_path, save_path, logger, w
         pickle.dump(dense_infos_val, f)
     print('Dense info val file is saved to %s' % val_filename)
 
-    # with open(trainval_filename, 'wb') as f:
-    #     pickle.dump(dense_infos_train + dense_infos_val, f)
-    # print('Dense info trainval file is saved to %s' % trainval_filename)
+    with open(trainval_filename, 'wb') as f:
+        pickle.dump(dense_infos_train + dense_infos_val, f)
+    print('Dense info trainval file is saved to %s' % trainval_filename)
 
-    # dataset.set_split(test_split)
-    # dense_infos_test = dataset.get_infos(logger, num_workers=workers, has_label=False, count_inside_pts=False)
-    # with open(test_filename, 'wb') as f:
-    #     pickle.dump(dense_infos_test, f)
-    # print('Dense info test file is saved to %s' % test_filename)
+    dataset.set_split(test_split)
+    dense_infos_test = dataset.get_infos(logger, num_workers=workers, has_label=False, count_inside_pts=False)
+    with open(test_filename, 'wb') as f:
+        pickle.dump(dense_infos_test, f)
+    print('Dense info test file is saved to %s' % test_filename)
 
     print('---------------Start create groundtruth database for data augmentation---------------')
     dataset.set_split(train_split)
