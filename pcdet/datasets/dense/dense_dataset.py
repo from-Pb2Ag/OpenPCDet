@@ -597,7 +597,7 @@ if __name__ == '__main__':
 
         dataset_cfg = EasyDict(yaml.load(open(sys.argv[4])))
         create_dense_infos(dataset_cfg=dataset_cfg,
-                           class_names=['Car', 'Pedestrian', 'Cyclist'],
+                           class_names=['PassengerCar', 'Pedestrian', 'RidableVehicle'],
                            data_path=ROOT_DIR / 'data' / 'dense',
                            save_path=ROOT_DIR / 'data' / 'dense',
                            logger=log)
