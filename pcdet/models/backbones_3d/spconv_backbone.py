@@ -97,7 +97,7 @@ class VoxelBackBone8x(nn.Module):
             block(64, 64, 3, norm_fn=norm_fn, padding=1, indice_key='subm3'),
             block(64, 64, 3, norm_fn=norm_fn, padding=1, indice_key='subm3'),
         )
-
+        #padding = (z,y,x)
         self.conv4 = spconv.SparseSequential(
             # [400, 352, 11] <- [200, 176, 5]
             block(64, 64, 3, norm_fn=norm_fn, stride=2, padding=(0, 1, 1), indice_key='spconv4', conv_type='spconv'),
@@ -113,7 +113,7 @@ class VoxelBackBone8x(nn.Module):
                                 bias=False, indice_key='spconv_down2'),
             norm_fn(128),
             nn.ReLU(),
-        )
+        ) # kernel = (z dim, y dim, x dim), stride = (z, y, x)
         self.num_point_features = 128
 
     def forward(self, batch_dict):
@@ -121,8 +121,8 @@ class VoxelBackBone8x(nn.Module):
         Args:
             batch_dict:
                 batch_size: int
-                vfe_features: (num_voxels, C)
-                voxel_coords: (num_voxels, 4), [batch_idx, z_idx, y_idx, x_idx]
+                vfe_features: (num_voxels, C) mean x,y,z, intensity of points in the voxel, etc
+                voxel_coords: (num_voxels, 4), [batch_idx, z_idx, y_idx, x_idx], batch_idx is the point cloud idx in the batch, z_idx is the z grid coord of the voxel
         Returns:
             batch_dict:
                 encoded_spconv_tensor: sparse tensor
@@ -138,14 +138,14 @@ class VoxelBackBone8x(nn.Module):
 
         x = self.conv_input(input_sp_tensor)
 
-        x_conv1 = self.conv1(x)
+        x_conv1 = self.conv1(x) #spatial size of one point cloud in voxels= [z=41, y=1504, x=1504], Output features = (Total num occupied voxels in 4 point clouds = 304064, cout=16 )
         x_conv2 = self.conv2(x_conv1)
         x_conv3 = self.conv3(x_conv2)
-        x_conv4 = self.conv4(x_conv3)
+        x_conv4 = self.conv4(x_conv3) #[5, 188, 188], (69300, cout=64)
 
         # for detection head
         # [200, 176, 5] -> [200, 176, 2]
-        out = self.conv_out(x_conv4)
+        out = self.conv_out(x_conv4)#[2, 188, 188], (48767, Cout=128)
 
         batch_dict.update({
             'encoded_spconv_tensor': out,

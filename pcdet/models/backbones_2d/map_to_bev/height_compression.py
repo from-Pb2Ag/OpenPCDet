@@ -16,6 +16,12 @@ class HeightCompression(nn.Module):
             batch_dict:
                 spatial_features:
 
+        N= 4 = num of point clouds in a batch = batch_size per gpu =,
+        C= 128 = feature dim = Cout of spconv
+        D = 2 = grid size in z dim = Up/down
+        H = 188 = grid size in y dim = left/right
+        W = 188 = grid size in x dim (x dim is forward/backward)
+
         """
         encoded_spconv_tensor = batch_dict['encoded_spconv_tensor']
         spatial_features = encoded_spconv_tensor.dense()
