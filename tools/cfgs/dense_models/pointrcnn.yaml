@@ -1,4 +1,4 @@
-CLASS_NAMES: ['Car', 'Pedestrian', 'Cyclist']
+CLASS_NAMES: ['PassengerCar', 'Pedestrian', 'RidableVehicle']
 
 DATA_CONFIG:
     _BASE_CONFIG_: ../tools/cfgs/dataset_configs/dense_dataset.yaml
