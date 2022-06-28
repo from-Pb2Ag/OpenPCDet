@@ -232,7 +232,7 @@ class DenseDataset(DatasetTemplate):
                             return self.__getitem__(new_index)
 
                         pts_fov = pts[fov_flag]
-                        corners_lidar = box_utils.boxes_to_corners_3d(gt_boxes_lidar)
+                        corners_lidar = box_utils.boxes_to_corners_3d(gt_boxes_lidar) #nboxes, 8 corners, 3coords
                         num_points_in_gt = -np.ones(num_gt, dtype=np.int32)
 
                         for k in range(num_objects):
@@ -548,12 +548,12 @@ def create_dense_infos(dataset_cfg, class_names, data_path, save_path, logger, w
 
     dataset = DenseDataset(dataset_cfg=dataset_cfg, class_names=class_names, root_path=data_path, training=False)
     train_split, val_split = dataset_cfg.DATA_SPLIT['train'], dataset_cfg.DATA_SPLIT['test']
-    test_split = 'test_clear' #TODO
+    test_split = 'test_all_25' #TODO
 
     train_filename = save_path / ('dense_infos_%s.pkl' % train_split)
     val_filename = save_path / ('dense_infos_%s.pkl' % val_split)
     trainval_filename = save_path / 'dense_infos_trainval.pkl'
-    test_filename = save_path / 'dense_infos_test.pkl'
+    test_filename = save_path / f'dense_infos_{test_split}.pkl'
 
     print('---------------Start to generate data infos---------------')
 

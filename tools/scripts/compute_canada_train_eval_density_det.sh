@@ -3,7 +3,7 @@
 #SBATCH --job-name=OpenPCDet-train
 #SBATCH --account=rrg-swasland
 #SBATCH --cpus-per-task=8             # CPU cores/threads
-#SBATCH --gres=gpu:t4:2                # Number of GPUs (per node)
+#SBATCH --gres=gpu:t4:4                # Number of GPUs (per node)
 #SBATCH --mem=64000M                   # memory per node
 #SBATCH --output=./output/log/%x-%j.out   # STDOUT
 #SBATCH --mail-type=ALL
@@ -15,7 +15,7 @@ die() { echo "$*" 1>&2 ; exit 1; }
 # Default Command line args
 # train.py script parameters
 CFG_FILE=tools/cfgs/kitti_models/pv_rcnn.yaml
-TRAIN_BATCH_SIZE='default'
+TRAIN_BATCH_SIZE=4
 TEST_BATCH_SIZE='default'
 WORKERS=$SLURM_CPUS_PER_TASK
 EXTRA_TAG='default'
