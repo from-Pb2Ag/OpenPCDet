@@ -477,11 +477,14 @@ class DenseDataset(DatasetTemplate):
                 print(index)
                 sys.exit(1)
 
-            loc, dims, rots = annos['location'], annos['dimensions'], annos['rotation_y']
-            gt_boxes_camera = np.concatenate([loc, dims, rots[..., np.newaxis]], axis=1).astype(np.float32)
-            gt_boxes_lidar = box_utils.boxes3d_kitti_camera_to_lidar(gt_boxes_camera, calib)
-
             gt_names = annos['name']
+            gt_boxes_lidar = annos['gt_boxes_lidar']
+
+            # Drop gt_names and boxes with negative h,w,l i.e. not visible in lidar
+            keep_indices = [i for i in range(gt_boxes_lidar.shape[0]) if gt_boxes_lidar[i, 3] > 0]
+            gt_names = gt_names[keep_indices]
+            gt_boxes_lidar = gt_boxes_lidar[keep_indices]
+            assert gt_names.shape[0] == gt_boxes_lidar.shape[0]
 
             input_dict.update({
                 'gt_names': gt_names,
@@ -490,8 +493,6 @@ class DenseDataset(DatasetTemplate):
             road_plane = self.get_road_plane(sample_idx)
             if road_plane is not None:
                 input_dict['road_plane'] = road_plane
-
-        #before_dict['gt_boxes'] = self.before_gt_boxes(data_dict=copy.deepcopy(input_dict))
 
         data_dict = self.prepare_data(data_dict=input_dict)
 
