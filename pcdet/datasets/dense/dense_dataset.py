@@ -153,11 +153,11 @@ class DenseDataset(DatasetTemplate):
             pc_info = {'num_features': 5, 'lidar_idx': sample_idx}
             info['point_cloud'] = pc_info
 
-            try:
-                img_shape = self.get_image_shape(sample_idx)
-            except (SyntaxError, ValueError) as e:
-                print(f'{e}\n\n{sample_idx} image seems to be broken')
-                img_shape = np.array([1024, 1920], dtype=np.int32)
+            # try:
+            #     img_shape = self.get_image_shape(sample_idx)
+            # except (SyntaxError, ValueError) as e:
+            #     print(f'{e}\n\n{sample_idx} image seems to be broken')
+            img_shape = np.array([1024, 1920], dtype=np.int32)
 
             image_info = {'image_idx': sample_idx, 'image_shape': img_shape}
             info['image'] = image_info
@@ -210,33 +210,34 @@ class DenseDataset(DatasetTemplate):
                     if count_inside_pts:
                         pts = self.get_lidar(sample_idx)
                         calib = get_calib(self.sensor_type)
-                        pts_rect = calib.lidar_to_rect(pts[:, 0:3])
+                        if self.dataset_cfg.FOV_POINTS_ONLY:
+                            pts_rect = calib.lidar_to_rect(pts[:, 0:3])
 
-                        fov_flag = get_fov_flag(pts_rect, info['image']['image_shape'], calib)
+                            fov_flag = get_fov_flag(pts_rect, info['image']['image_shape'], calib)
 
-                        # sanity check that there is no frame without a single point in the camera field of view left
-                        if max(fov_flag) == 0:
+                            # sanity check that there is no frame without a single point in the camera field of view left
+                            if max(fov_flag) == 0:
 
-                            sample = nth_repl(sample_idx, '_', ',', 2)
+                                sample = nth_repl(sample_idx, '_', ',', 2)
 
-                            message = f'stage: {"train" if self.training else "eval"}, split: {self.split}, ' \
-                                      f'sample: {sample} does not have any points inside the camera FOV ' \
-                                      f'and will be skipped'
+                                message = f'stage: {"train" if self.training else "eval"}, split: {self.split}, ' \
+                                        f'sample: {sample} does not have any points inside the camera FOV ' \
+                                        f'and will be skipped'
 
-                            try:
-                                self.logger.error(message)
-                            except AttributeError:
-                                print(message)
+                                try:
+                                    self.logger.error(message)
+                                except AttributeError:
+                                    print(message)
 
-                            new_index = np.random.randint(self.__len__())
-                            return self.__getitem__(new_index)
+                                new_index = np.random.randint(self.__len__())
+                                return self.__getitem__(new_index)
 
-                        pts_fov = pts[fov_flag]
+                            pts = pts[fov_flag]
                         corners_lidar = box_utils.boxes_to_corners_3d(gt_boxes_lidar) #nboxes, 8 corners, 3coords
                         num_points_in_gt = -np.ones(num_gt, dtype=np.int32)
 
                         for k in range(num_objects):
-                            flag = box_utils.in_hull(pts_fov[:, 0:3], corners_lidar[k])
+                            flag = box_utils.in_hull(pts[:, 0:3], corners_lidar[k])
                             num_points_in_gt[k] = flag.sum()
                         annotations['num_points_in_gt'] = num_points_in_gt
 
