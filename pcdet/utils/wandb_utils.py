@@ -23,7 +23,7 @@ def init(cfg, args, job_type='train_eval'):
         return
 
     dir = cfg['WANDB'].get('dir', None)
-    wandb.init(name=cfg.TAG,
+    wandb.init(name=cfg.TAG +'-'+ args.extra_tag,
                config=cfg,
                project=cfg.WANDB.PROJECT,
                entity=cfg.WANDB.ENTITY,
