@@ -8,13 +8,16 @@ from pathlib import Path
 
 import numpy as np
 import torch
+from torch.autograd import profiler
 from tensorboardX import SummaryWriter
+import tqdm
 
 from eval_utils import eval_utils
 from pcdet.config import cfg, cfg_from_list, cfg_from_yaml_file, log_config_to_file
 from pcdet.datasets import build_dataloader
-from pcdet.models import build_network
+from pcdet.models import build_network, load_data_to_gpu
 from pcdet.utils import common_utils
+from pcdet.utils import wandb_utils
 
 
 def parse_config():
@@ -37,6 +40,16 @@ def parse_config():
     parser.add_argument('--eval_all', action='store_true', default=False, help='whether to evaluate all checkpoints')
     parser.add_argument('--ckpt_dir', type=str, default=None, help='specify a ckpt directory to be evaluated if needed')
     parser.add_argument('--save_to_file', action='store_true', default=False, help='')
+    parser.add_argument('--disable_wandb', action='store_true', default=False, help='Turn off wandb reporting')
+
+    # Pickle Evaluation arguments
+    parser.add_argument('--eval_levels_file', type=str, default=None, help='eval yaml for custom evaluation matrics')
+    parser.add_argument('--pickle_file', type=str, default=None, help='pickle file to evaluate')
+    parser.add_argument('--discard_results', action='store_true', default=False, help='Set to true to not save generated pickle file. --pickle_file required')
+
+    # Time profiler
+    parser.add_argument('--time_profile', action='store_true', default=False)
+    parser.add_argument('--time_profile_iterations', type=int, default=100)
 
     args = parser.parse_args()
 
@@ -49,6 +62,10 @@ def parse_config():
     if args.set_cfgs is not None:
         cfg_from_list(args.set_cfgs, cfg)
 
+    if args.eval_levels_file is not None:
+        cfg_from_yaml_file(args.eval_levels_file, cfg)
+        cfg.MODEL.POST_PROCESSING.EVAL_LEVELS_TAG = Path(args.eval_levels_file).stem
+
     return args, cfg
 
 
@@ -58,11 +75,12 @@ def eval_single_ckpt(model, test_loader, args, eval_output_dir, logger, epoch_id
     model.cuda()
 
     # start evaluation
-    eval_utils.eval_one_epoch(
+    eval_dict = eval_utils.eval_one_epoch(
         cfg, model, test_loader, epoch_id, logger, dist_test=dist_test,
         result_dir=eval_output_dir, save_to_file=args.save_to_file
     )
 
+    wandb_utils.log_and_summary(cfg, eval_dict, step=int(epoch_id))
 
 def get_no_evaluated_ckpt(ckpt_dir, ckpt_record_file, args):
     ckpt_list = glob.glob(os.path.join(ckpt_dir, '*checkpoint_epoch_*.pth'))
@@ -88,28 +106,17 @@ def repeat_eval_ckpt(model, test_loader, args, eval_output_dir, logger, ckpt_dir
     with open(ckpt_record_file, 'a'):
         pass
 
+    highest_metric = -1.
+
     # tensorboard log
     if cfg.LOCAL_RANK == 0:
         tb_log = SummaryWriter(log_dir=str(eval_output_dir / ('tensorboard_%s' % cfg.DATA_CONFIG.DATA_SPLIT['test'])))
-    total_time = 0
-    first_eval = True
 
     while True:
         # check whether there is checkpoint which is not evaluated
         cur_epoch_id, cur_ckpt = get_no_evaluated_ckpt(ckpt_dir, ckpt_record_file, args)
         if cur_epoch_id == -1 or int(float(cur_epoch_id)) < args.start_epoch:
-            wait_second = 30
-            if cfg.LOCAL_RANK == 0:
-                print('Wait %s seconds for next check (progress: %.1f / %d minutes): %s \r'
-                      % (wait_second, total_time * 1.0 / 60, args.max_waiting_mins, ckpt_dir), end='', flush=True)
-            time.sleep(wait_second)
-            total_time += 30
-            if total_time > args.max_waiting_mins * 60 and (first_eval is False):
-                break
-            continue
-
-        total_time = 0
-        first_eval = False
+            break
 
         model.load_params_from_file(filename=cur_ckpt, logger=logger, to_cpu=dist_test)
         model.cuda()
@@ -120,6 +127,8 @@ def repeat_eval_ckpt(model, test_loader, args, eval_output_dir, logger, ckpt_dir
             cfg, model, test_loader, cur_epoch_id, logger, dist_test=dist_test,
             result_dir=cur_result_dir, save_to_file=args.save_to_file
         )
+
+        highest_metric = wandb_utils.log_and_summary(cfg, tb_dict, step=int(cur_epoch_id), highest_metric=highest_metric)
 
         if cfg.LOCAL_RANK == 0:
             for key, val in tb_dict.items():
@@ -167,6 +176,9 @@ def main():
     log_file = eval_output_dir / ('log_eval_%s.txt' % datetime.datetime.now().strftime('%Y%m%d-%H%M%S'))
     logger = common_utils.create_logger(log_file, rank=cfg.LOCAL_RANK)
 
+    if not args.disable_wandb:
+        wandb_utils.init(cfg, args, job_type='eval')
+
     # log to file
     logger.info('**********************Start logging**********************')
     gpu_list = os.environ['CUDA_VISIBLE_DEVICES'] if 'CUDA_VISIBLE_DEVICES' in os.environ.keys() else 'ALL'
@@ -187,12 +199,33 @@ def main():
         dist=dist_test, workers=args.workers, logger=logger, training=False
     )
 
-    model = build_network(model_cfg=cfg.MODEL, num_class=len(cfg.CLASS_NAMES), dataset=test_set)
-    with torch.no_grad():
-        if args.eval_all:
-            repeat_eval_ckpt(model, test_loader, args, eval_output_dir, logger, ckpt_dir, dist_test=dist_test)
-        else:
-            eval_single_ckpt(model, test_loader, args, eval_output_dir, logger, epoch_id, dist_test=dist_test)
+    if args.pickle_file:
+        eval_dict = eval_utils.eval_pickle(cfg, args.pickle_file, args.discard_results, test_loader, eval_output_dir, epoch_id, logger)
+        if not args.disable_wandb:
+            wandb_utils.log_and_summary(cfg, eval_dict, step=0)
+    elif args.time_profile:
+        model = build_network(model_cfg=cfg.MODEL, num_class=len(cfg.CLASS_NAMES), dataset=test_set)
+        model.load_params_from_file(filename=args.ckpt, logger=logger, to_cpu=dist_test)
+        model.cuda()
+        model.eval()
+        progress_bar = tqdm.tqdm(total=args.time_profile_iterations, leave=True, desc='time profiler', dynamic_ncols=True)
+        for i, batch_dict in enumerate(test_loader):
+            if i >= args.time_profile_iterations:
+                break
+            load_data_to_gpu(batch_dict)
+            with profiler.profile(use_cuda=True) as prof:
+                with torch.no_grad():
+                    pred_dicts, ret_dict = model(batch_dict)
+            progress_bar.update()
+        progress_bar.close()
+        print(prof.key_averages().table(sort_by="self_cpu_time_total", row_limit=15))
+    else:
+        model = build_network(model_cfg=cfg.MODEL, num_class=len(cfg.CLASS_NAMES), dataset=test_set)
+        with torch.no_grad():
+            if args.eval_all:
+                repeat_eval_ckpt(model, test_loader, args, eval_output_dir, logger, ckpt_dir, dist_test=dist_test)
+            else:
+                eval_single_ckpt(model, test_loader, args, eval_output_dir, logger, epoch_id, dist_test=dist_test)
 
 
 if __name__ == '__main__':

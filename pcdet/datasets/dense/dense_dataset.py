@@ -406,7 +406,7 @@ class DenseDataset(DatasetTemplate):
 
         return annos
 
-    def evaluation(self, det_annos, class_names, logger, **kwargs):
+    def evaluation(self, det_annos, class_names, **kwargs):
         if 'annos' not in self.dense_infos[0].keys():
             return None, {}
 
@@ -414,7 +414,7 @@ class DenseDataset(DatasetTemplate):
 
         eval_det_annos = copy.deepcopy(det_annos)
         eval_gt_annos = [copy.deepcopy(info['annos']) for info in self.dense_infos]
-        ap_result_str, ap_dict = kitti_eval.get_official_eval_result(eval_gt_annos, eval_det_annos, class_names, logger)
+        ap_result_str, ap_dict = kitti_eval.get_official_eval_result(eval_gt_annos, eval_det_annos, class_names)
 
         return ap_result_str, ap_dict
 

@@ -110,13 +110,53 @@ def eval_one_epoch(cfg, model, dataloader, epoch_id, logger, dist_test=False, sa
     result_str, result_dict = dataset.evaluation(
         det_annos, class_names,
         eval_metric=cfg.MODEL.POST_PROCESSING.EVAL_METRIC,
-        output_path=final_output_dir
+        output_path=final_output_dir,
+        eval_levels_cfg=cfg.MODEL.POST_PROCESSING.get('EVAL_LEVELS', None)
     )
 
     logger.info(result_str)
     ret_dict.update(result_dict)
 
     logger.info('Result is save to %s' % result_dir)
+    logger.info('****************Evaluation done.*****************')
+    return ret_dict
+
+
+def eval_pickle(cfg, pickle_file, disard_results, dataloader, result_dir, epoch_id, logger):
+    result_dir.mkdir(parents=True, exist_ok=True)
+    dataset = dataloader.dataset
+    class_names = dataset.class_names
+
+    logger.info('Evaluation on pickle file: {}'.format(pickle_file))
+
+    det_annos = []
+    with open(pickle_file, 'rb') as f:
+        det_annos = pickle.load(f)
+
+    result_str, result_dict = dataset.evaluation(
+        det_annos, class_names,
+        eval_metric=cfg.MODEL.POST_PROCESSING.EVAL_METRIC,
+        eval_levels_list_cfg=cfg.MODEL.POST_PROCESSING.get('EVAL_LEVELS_LIST', None)
+    )
+
+    ret_dict = {
+        'EVAL_LEVELS_LIST': cfg.MODEL.POST_PROCESSING.get('EVAL_LEVELS_LIST', None)
+    }
+
+    logger.info(result_str)
+    if isinstance(result_dict, dict):
+        ret_dict.update(result_dict)
+    else:
+        ret_dict['distance'] = result_dict
+    logger.info(ret_dict)
+
+    if not disard_results:
+        logger.info('Eval is saved to %s' % result_dir)
+        with open(result_dir / '{}_eval.pkl'.format(cfg.TAG), 'wb') as f:
+            pickle.dump(ret_dict, f)
+    else:
+        logger.info('Not saving results')
+
     logger.info('****************Evaluation done.*****************')
     return ret_dict
 

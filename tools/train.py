@@ -17,6 +17,9 @@ from pcdet.utils import common_utils
 from train_utils.optimization import build_optimizer, build_scheduler
 from train_utils.train_utils import train_model
 
+from checkpoint import init_model_from_weights
+torch.backends.cudnn.enabled = False
+
 def none_or_str(value):
     if value == 'None':
         return None
@@ -127,7 +130,10 @@ def main():
     start_epoch = it = 0
     last_epoch = -1
     if args.pretrained_model is not None:
-        model.load_params_from_file(filename=args.pretrained_model, to_cpu=dist, logger=logger)
+        #model.load_params_from_file(filename=args.pretrained_model, to_cpu=dist, logger=logger)
+        ### Change for finetuning
+        state = torch.load(args.pretrained_model)
+        init_model_from_weights(model, state, freeze_bb=False)
 
     if args.ckpt is not None:
         it, start_epoch = model.load_params_with_optimizer(args.ckpt, to_cpu=dist, optimizer=optimizer, logger=logger)
