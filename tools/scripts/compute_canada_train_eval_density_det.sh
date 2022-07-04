@@ -25,7 +25,7 @@ TCP_PORT=18888
 SYNC_BN=true
 FIX_RANDOM_SEED=false
 CKPT_SAVE_INTERVAL=1
-MAX_CKPT_SAVE_NUM=10
+MAX_CKPT_SAVE_NUM=50
 
 # ========== KITTI ==========
 DATA_DIR_KITTI=/home/$USER/projects/def-swasland-ab/Datasets/Kitti
@@ -47,7 +47,7 @@ SING_IMG=/home/$USER/projects/def-swasland-ab/singularity/densitydet-count.sif
 DIST=true
 TEST_ONLY=false
 WANDB_API_KEY=$WANDB_API_KEY
-WANDB_MODE='dryrun'
+WANDB_MODE='offline'
 
 # Get last element in string and increment by 1
 NUM_GPUS="${CUDA_VISIBLE_DEVICES: -1}"
