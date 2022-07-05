@@ -5,7 +5,7 @@ WANDB:
     PROJECT: DepthContrast_dense
     ENTITY: trailab
     SUMMARY_HIGHEST_METRIC: None
-    dir: None
+    dir: '/OpenPCDet/output'
 
 DATA_CONFIG:
     _BASE_CONFIG_: ../tools/cfgs/dataset_configs/dense_dataset.yaml
