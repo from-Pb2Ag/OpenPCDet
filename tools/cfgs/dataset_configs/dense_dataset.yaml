@@ -5,14 +5,14 @@ POINT_CLOUD_RANGE: [0, -40, -3, 70.4, 40, 1]
 
 # To create infos and gtdb infos
 DATA_SPLIT: {
-    'train': train_clear_short,
-    'test': val_clear_short
+    'train': train_clear_60,
+    'test': val_clear_15
 }
 
 # To train/eval:
 INFO_PATH: {
-    'train': [dense_infos_train_clear_short.pkl],
-    'test': [dense_infos_val_clear_short.pkl],
+    'train': [dense_infos_train_clear_60.pkl],
+    'test': [dense_infos_val_clear_15.pkl],
 }
 
 FOV_POINTS_ONLY: False
