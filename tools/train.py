@@ -16,6 +16,7 @@ from pcdet.models import build_network, model_fn_decorator
 from pcdet.utils import common_utils
 from train_utils.optimization import build_optimizer, build_scheduler
 from train_utils.train_utils import train_model
+from pcdet.utils import wandb_utils
 
 from checkpoint import init_model_from_weights
 torch.backends.cudnn.enabled = False
@@ -185,6 +186,7 @@ def main():
 
     logger.info('**********************Start evaluation %s/%s(%s)**********************' %
                 (cfg.EXP_GROUP_PATH, cfg.TAG, args.extra_tag))
+    wandb_utils.init(cfg, args, job_type='train_eval')
     test_set, test_loader, sampler = build_dataloader(
         dataset_cfg=cfg.DATA_CONFIG,
         class_names=cfg.CLASS_NAMES,
