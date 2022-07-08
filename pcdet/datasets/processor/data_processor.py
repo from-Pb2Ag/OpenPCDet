@@ -120,12 +120,13 @@ class DataProcessor(object):
             # if pc is super sparse that it has less than 16384 points to begin with
             choice = np.arange(0, len(points), dtype=np.int32)
             if num_points > len(points):
-                #frame_id = data_dict['frame_id']
+                frame_id = data_dict['frame_id']
                 #print(f'frame_id: {frame_id}, len_points: {len(points)}')
                 if num_points - len(points) > len(points):
                     #hack to remove very sparse pcs i.e.len(points) < num_points/2
                     #check with this, without this and without frames whose len(points) < 16384
-                    data_dict['gt_boxes'] = []
+                    #print(f'frame_id: {frame_id}, len_points: {len(points)}')
+                    #data_dict['gt_boxes'] = []
                     extra_choice = np.random.choice(choice, num_points - len(points), replace=True)
                 else:
                     extra_choice = np.random.choice(choice, num_points - len(points), replace=False)
