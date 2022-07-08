@@ -9,6 +9,20 @@ from .augmentor.data_augmentor import DataAugmentor
 from .processor.data_processor import DataProcessor
 from .processor.point_feature_encoder import PointFeatureEncoder
 
+def nth_repl(s: str, sub: str, repl: str, n: int):
+    find = s.find(sub)
+    # If find is not -1 we have found at least one match for the substring
+    i = find != -1
+    # loop util we find the nth or we find no match
+    while find != -1 and i != n:
+        # find + 1 means we start searching from after the last match
+        find = s.find(sub, find + 1)
+        i += 1
+    # If i is equal to n we found nth match so replace
+    if i == n:
+        return s[:find] + repl + s[find+len(sub):]
+    return s
+
 
 class DatasetTemplate(torch_data.Dataset):
     def __init__(self, dataset_cfg=None, class_names=None, training=True, root_path=None, logger=None):
@@ -133,13 +147,25 @@ class DatasetTemplate(torch_data.Dataset):
             gt_boxes = np.concatenate((data_dict['gt_boxes'], gt_classes.reshape(-1, 1).astype(np.float32)), axis=1)
             data_dict['gt_boxes'] = gt_boxes
 
-        data_dict = self.point_feature_encoder.forward(data_dict)
+        if data_dict.get('points', None) is not None:
+            data_dict = self.point_feature_encoder.forward(data_dict)
 
         data_dict = self.data_processor.forward(
             data_dict=data_dict
         )
 
         if self.training and len(data_dict['gt_boxes']) == 0:
+            
+            sample = nth_repl(data_dict['frame_id'], '_', ',', 2)
+
+            message = f'stage: {"train" if self.training else "eval"}, ' \
+                      f'sample: {sample} without valid annotations skipped'
+
+            try:
+                self.logger.warning(message)
+            except AttributeError:
+                print(message)
+
             new_index = np.random.randint(self.__len__())
             return self.__getitem__(new_index)
 

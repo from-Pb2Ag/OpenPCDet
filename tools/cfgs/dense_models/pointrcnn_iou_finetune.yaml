@@ -1,4 +1,4 @@
-CLASS_NAMES: ['PassengerCar', 'Pedestrian', 'RidableVehicle']
+CLASS_NAMES: ['Car', 'Pedestrian', 'Cyclist']
 
 WANDB:
     ENABLED: True

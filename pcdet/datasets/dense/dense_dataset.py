@@ -11,7 +11,7 @@ from skimage import io
 
 from multiprocessing import cpu_count
 
-from pcdet.datasets.dataset import DatasetTemplate
+from pcdet.datasets.dataset import DatasetTemplate, nth_repl
 from pcdet.ops.roiaware_pool3d import roiaware_pool3d_utils
 from pcdet.utils import box_utils, calibration_kitti, common_utils, object3d_kitti
 
@@ -69,6 +69,7 @@ class DenseDataset(DatasetTemplate):
         self.include_dense_data(self.mode)
 
         self.lidar_folder = f'lidar_{self.sensor_type}_{self.signal_type}'
+        self.empty_annos = 0
 
 
     def include_dense_data(self, mode):
@@ -123,7 +124,7 @@ class DenseDataset(DatasetTemplate):
     def get_label(self, idx):
         label_file = self.root_path / 'gt_labels' / 'cam_left_labels_TMP' / ('%s.txt' % idx)
         assert label_file.exists(), f'{label_file} not found'
-        return object3d_kitti.get_objects_from_label(label_file)
+        return object3d_kitti.get_objects_from_label(label_file, dense=True)
 
     def get_road_plane(self, idx):
         plane_file = self.root_path / 'velodyne_planes' / ('%s.txt' % idx)
@@ -142,6 +143,19 @@ class DenseDataset(DatasetTemplate):
         norm = np.linalg.norm(plane[0:3])
         plane = plane / norm
         return plane
+
+    def get_weather(self):
+        weather = None
+        if 'clear' in self.split:
+            weather = 'clear'
+        elif 'dense_fog' in self.split:
+            weather = 'dense_fog'
+        elif 'light_fog' in self.split:
+            weather = 'light_fog'
+        elif 'snow' in self.split:
+            weather = 'snow'
+        
+        return weather
 
     def get_infos(self, logger, num_workers=cpu_count(), has_label=True, count_inside_pts=True, sample_id_list=None):
         import concurrent.futures as futures
@@ -177,9 +191,12 @@ class DenseDataset(DatasetTemplate):
 
                     obj_list = self.get_label(sample_idx)
 
+                    # Ignore any class not in relevant classes
+                    obj_list = [obj for obj in obj_list if obj.cls_type in self.class_names]
+
                     if len(obj_list) == 0:
                         raise ValueError
-
+                    
                     annotations = {'name':       np.array([obj.cls_type for obj in obj_list]),
                                    'truncated':  np.array([obj.truncation for obj in obj_list]),
                                    'occluded':   np.array([obj.occlusion for obj in obj_list]),
@@ -189,7 +206,8 @@ class DenseDataset(DatasetTemplate):
                                    'location':   np.concatenate([obj.loc.reshape(1, 3) for obj in obj_list], axis=0),
                                    'rotation_y': np.array([obj.ry for obj in obj_list]),
                                    'score':      np.array([obj.score for obj in obj_list]),
-                                   'difficulty': np.array([obj.level for obj in obj_list], np.int32)}
+                                   'difficulty': np.array([obj.level for obj in obj_list], np.int32),
+                                   'weather': self.get_weather()}
 
                     num_objects = len([obj.cls_type for obj in obj_list if obj.cls_type != 'DontCare'])
                     num_gt = len(annotations['name'])
@@ -271,6 +289,47 @@ class DenseDataset(DatasetTemplate):
             infos = list(tqdm(executor.map(process_single_scene, sample_id_list), total=len(sample_id_list)))
 
         filtered_for_none_infos = [info for info in infos if info]
+
+        if has_label:
+
+            name_counter = {}
+            points_counter = {}
+
+            for info in filtered_for_none_infos:
+
+                for i in range(len(info['annos']['name'])):
+
+                    name = info['annos']['name'][i]
+                    points = info['annos']['num_points_in_gt'][i]
+
+                    if name in name_counter:
+                        name_counter[name] += 1
+                    else:
+                        name_counter[name] = 1
+
+                    if name in points_counter:
+                        points_counter[name] += points
+                    else:
+                        points_counter[name] = points
+
+            logger.info('')
+            logger.info('Class distribution')
+            logger.info('==================')
+            for key, value in name_counter.items():
+                logger.info(f'{key:12s} {value}')
+
+            logger.info('')
+            logger.info('Points distribution')
+            logger.info('===================')
+            for key, value in points_counter.items():
+                logger.info(f'{key:12s} {value}')
+
+            logger.info('')
+            logger.info('Average # of points')
+            logger.info('===================')
+            for key, value in points_counter.items():
+                logger.info(f'{key:12s} {value/name_counter[key]:.0f}')
+            logger.info('')
 
         return filtered_for_none_infos
 
@@ -414,7 +473,9 @@ class DenseDataset(DatasetTemplate):
 
         eval_det_annos = copy.deepcopy(det_annos)
         eval_gt_annos = [copy.deepcopy(info['annos']) for info in self.dense_infos]
-        ap_result_str, ap_dict = kitti_eval.get_official_eval_result(eval_gt_annos, eval_det_annos, class_names)
+        ap_result_str, ap_dict = kitti_eval.get_official_eval_result(
+            gt_annos=eval_gt_annos, dt_annos=eval_det_annos, current_classes=class_names
+        )
 
         return ap_result_str, ap_dict
 
@@ -478,13 +539,30 @@ class DenseDataset(DatasetTemplate):
                 print(index)
                 sys.exit(1)
 
+            if self.dataset_cfg.DROP_EMPTY_ANNOTATIONS:
+
+                num_before = len(annos['name'])
+                annos = drop_infos_with_no_points(annos)
+                num_after = len(annos['name'])
+
+                num_diff = num_before - num_after
+
+                if num_diff > 0:
+                    self.empty_annos += num_diff
+                    try:
+                        self.logger.debug(f'annotations without points accumulated to {self.empty_annos}')
+                    except AttributeError:
+                        pass
+            
+            loc, dims, rots = annos['location'], annos['dimensions'], annos['rotation_y']
+            gt_boxes_camera = np.concatenate([loc, dims, rots[..., np.newaxis]], axis=1).astype(np.float32)
+            gt_boxes_lidar_test = box_utils.boxes3d_kitti_camera_to_lidar(gt_boxes_camera, calib)
+
             gt_names = annos['name']
             gt_boxes_lidar = annos['gt_boxes_lidar']
 
-            # Drop gt_names and boxes with negative h,w,l i.e. not visible in lidar
-            keep_indices = [i for i in range(gt_boxes_lidar.shape[0]) if gt_boxes_lidar[i, 3] > 0]
-            gt_names = gt_names[keep_indices]
-            gt_boxes_lidar = gt_boxes_lidar[keep_indices]
+            assert np.abs(gt_boxes_lidar_test - gt_boxes_lidar).sum() < 1e-4
+
             assert gt_names.shape[0] == gt_boxes_lidar.shape[0]
 
             input_dict.update({
@@ -520,10 +598,13 @@ def drop_info_with_name(info, name):
     ret_info = {}
     keep_indices = [i for i, x in enumerate(info['name']) if x != name]
 
+    #We dont have DontCare in infos
+    assert len(keep_indices) == info['name'].shape[0]
+
     try:
         for key in info.keys():
 
-            if key == 'gt_boxes_lidar':
+            if key == 'gt_boxes_lidar' or key == 'weather':
                 ret_info[key] = info[key]
             else:
                 ret_info[key] = info[key][keep_indices]
@@ -534,23 +615,25 @@ def drop_info_with_name(info, name):
     return ret_info
 
 
-# def drop_infos_with_no_points(info):
-# 
-#     ret_info = {}
-# 
-#     keep_indices = [i for i, x in enumerate(info['num_points_in_gt']) if x > 0]
-# 
-#     for key in info.keys():
-# 
-#         ret_info[key] = info[key][keep_indices]
-# 
-#     return ret_info
+def drop_infos_with_no_points(info):
+
+    ret_info = {}
+
+    keep_indices = [i for i, x in enumerate(info['num_points_in_gt']) if x > 0]
+
+    for key in info.keys():
+        if key == 'weather':
+            ret_info[key] = info[key]
+        else: 
+            ret_info[key] = info[key][keep_indices]
+
+    return ret_info
 
 def create_dense_infos(dataset_cfg, class_names, data_path, save_path, logger, workers=cpu_count()):
 
     dataset = DenseDataset(dataset_cfg=dataset_cfg, class_names=class_names, root_path=data_path, training=False)
     train_split, val_split = dataset_cfg.DATA_SPLIT['train'], dataset_cfg.DATA_SPLIT['test']
-    test_split = 'test_all_25' #TODO
+    test_split = 'test_snow_25' #TODO
 
     train_filename = save_path / ('dense_infos_%s.pkl' % train_split)
     val_filename = save_path / ('dense_infos_%s.pkl' % val_split)
@@ -571,12 +654,8 @@ def create_dense_infos(dataset_cfg, class_names, data_path, save_path, logger, w
         pickle.dump(dense_infos_val, f)
     print('Dense info val file is saved to %s' % val_filename)
 
-    with open(trainval_filename, 'wb') as f:
-        pickle.dump(dense_infos_train + dense_infos_val, f)
-    print('Dense info trainval file is saved to %s' % trainval_filename)
-
     dataset.set_split(test_split)
-    dense_infos_test = dataset.get_infos(logger, num_workers=workers, has_label=False, count_inside_pts=False)
+    dense_infos_test = dataset.get_infos(logger, num_workers=workers, has_label=True, count_inside_pts=True)
     with open(test_filename, 'wb') as f:
         pickle.dump(dense_infos_test, f)
     print('Dense info test file is saved to %s' % test_filename)
@@ -599,7 +678,7 @@ if __name__ == '__main__':
 
         dataset_cfg = EasyDict(yaml.load(open(sys.argv[4])))
         create_dense_infos(dataset_cfg=dataset_cfg,
-                           class_names=['PassengerCar', 'Pedestrian', 'RidableVehicle'],
+                           class_names=['Car', 'Pedestrian', 'Cyclist'],
                            data_path=ROOT_DIR / 'data' / 'dense',
                            save_path=ROOT_DIR / 'data' / 'dense',
                            logger=log)

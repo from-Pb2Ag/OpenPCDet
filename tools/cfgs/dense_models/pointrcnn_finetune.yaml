@@ -1,4 +1,4 @@
-CLASS_NAMES: ['PassengerCar', 'Pedestrian', 'RidableVehicle']
+CLASS_NAMES: ['Car', 'Pedestrian', 'Cyclist']
 
 WANDB:
     ENABLED: True
@@ -147,7 +147,7 @@ MODEL:
 
 OPTIMIZATION:
     BATCH_SIZE_PER_GPU: 2
-    NUM_EPOCHS: 15
+    NUM_EPOCHS: 80
 
     OPTIMIZER: adam_onecycle
     LR: 0.02
