@@ -407,7 +407,7 @@ then
 "
 fi
 
-if [ $TEST_ONLY = "true" ]
+if [ $TEST_ONLY == "true" ]
 then
     echo "Running ONLY evaluation"
     echo "$TEST_CMD"
