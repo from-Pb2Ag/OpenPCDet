@@ -411,7 +411,10 @@ def calculate_iou_partly(gt_annos, dt_annos, metric, num_parts=50):
             dt_num_idx += dt_box_num
         example_idx += num_part
 
-    return overlaps, parted_overlaps, total_gt_num, total_dt_num
+# len(overlaps) =  num frames, each element is a shape of (gt_num_boxes in that frame, dt_num_boxes in that frame), it contains overlap area between gt box and dt box
+# len(total_gt_num) = num frames, each element is gt_num_boxes in that frame
+# Each part has gt x dt overlaps for num_part=9 frames 
+    return overlaps, parted_overlaps, total_gt_num, total_dt_num 
 
 
 def _prepare_data(gt_annos, dt_annos, current_class, difficulty):

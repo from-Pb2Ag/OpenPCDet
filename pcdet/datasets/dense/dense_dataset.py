@@ -633,7 +633,7 @@ def create_dense_infos(dataset_cfg, class_names, data_path, save_path, logger, w
 
     dataset = DenseDataset(dataset_cfg=dataset_cfg, class_names=class_names, root_path=data_path, training=False)
     train_split, val_split = dataset_cfg.DATA_SPLIT['train'], dataset_cfg.DATA_SPLIT['test']
-    test_split = 'test_snow_25' #TODO
+    test_split = 'test_dense_fog_FOV3000_25' #TODO
 
     train_filename = save_path / ('dense_infos_%s.pkl' % train_split)
     val_filename = save_path / ('dense_infos_%s.pkl' % val_split)
