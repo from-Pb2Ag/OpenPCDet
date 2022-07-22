@@ -15,7 +15,7 @@ def is_wandb_enabled(cfg):
     return wandb_enabled
 
 
-def init(cfg, args, job_type='train_eval'):
+def init(cfg, args, job_type='train_eval', extra_tags=''):
     """
         Initialize wandb by passing in config
     """
@@ -23,11 +23,11 @@ def init(cfg, args, job_type='train_eval'):
         return
 
     dir = cfg['WANDB'].get('dir', None)
-    wandb.init(name=cfg.TAG +'-'+ args.extra_tag,
+    wandb.init(name=cfg.TAG +'-'+ args.extra_tag + '-' + extra_tags,
                config=cfg,
                project=cfg.WANDB.PROJECT,
                entity=cfg.WANDB.ENTITY,
-               tags=[args.extra_tag],
+               tags=[args.extra_tag, extra_tags],
                job_type=job_type,
                dir=dir)
 

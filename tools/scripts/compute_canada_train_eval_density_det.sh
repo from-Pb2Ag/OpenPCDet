@@ -19,6 +19,8 @@ TRAIN_BATCH_SIZE=4
 TEST_BATCH_SIZE='default'
 WORKERS=$SLURM_CPUS_PER_TASK
 EXTRA_TAG='default'
+TEST_INFO_PKL='default' # Test only 
+EVAL_TAG='default' # Test only 
 CKPT=None
 PRETRAINED_MODEL=None
 TCP_PORT=18888
@@ -230,6 +232,24 @@ while :; do
             die 'ERROR: "--data_dir" requires a non-empty option argument.'
         fi
         ;;
+    # Additional parameters
+    -e|--test_info_pkl)       # Takes an option argument; ensure it has been specified.
+        if [ "$2" ]; then
+            TEST_INFO_PKL=$2
+            shift
+        else
+            die 'ERROR: "--test_info_pkl" requires a non-empty option argument.'
+        fi
+        ;;
+    # Additional parameters
+    -g|--eval_tag)       # Takes an option argument; ensure it has been specified.
+        if [ "$2" ]; then
+            EVAL_TAG=$2
+            shift
+        else
+            die 'ERROR: "--eval_tag" requires a non-empty option argument.'
+        fi
+        ;;
     -i|--infos_dir)       # Takes an option argument; ensure it has been specified.
         if [ "$2" ]; then
             INFOS_DIR=$2
@@ -403,7 +423,21 @@ TEST_CMD+="
 # Additional arguments if necessary
 if [ $TEST_BATCH_SIZE != "default" ]
 then
-    TEST_CMD+="    --batch_size $TEST_BATCH_SIZE
+    TEST_CMD+=" --batch_size $TEST_BATCH_SIZE
+"
+fi
+
+# Additional arguments if necessary
+if [ $TEST_INFO_PKL != "default" ]
+then
+    TEST_CMD+=" --set DATA_CONFIG.INFO_PATH.test $TEST_INFO_PKL
+"
+fi
+
+# Additional arguments if necessary
+if [ $EVAL_TAG != "default" ]
+then
+    TEST_CMD+=" --eval_tag $EVAL_TAG
 "
 fi
 
