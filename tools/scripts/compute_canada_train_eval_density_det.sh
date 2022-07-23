@@ -428,16 +428,17 @@ then
 fi
 
 # Additional arguments if necessary
-if [ $TEST_INFO_PKL != "default" ]
-then
-    TEST_CMD+=" --set DATA_CONFIG.INFO_PATH.test $TEST_INFO_PKL
-"
-fi
-
-# Additional arguments if necessary
 if [ $EVAL_TAG != "default" ]
 then
     TEST_CMD+=" --eval_tag $EVAL_TAG
+"
+fi
+
+# Additional arguments if necessary 
+# DONT add any args after --set
+if [ $TEST_INFO_PKL != "default" ]
+then
+    TEST_CMD+=" --set DATA_CONFIG.INFO_PATH.test $TEST_INFO_PKL
 "
 fi
 
