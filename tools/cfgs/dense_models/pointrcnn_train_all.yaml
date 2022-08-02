@@ -12,14 +12,14 @@ DATA_CONFIG:
 
     # To create infos and gtdb infos
     DATA_SPLIT: {
-        'train': train_all_FOV3000_60,
-        'test': val_clear_FOV3000_15
+        'train': train_all_60,
+        'test': val_clear_15
     }
 
     # To train/eval:
     INFO_PATH: {
-        'train': [dense_infos_train_all_FOV3000_60.pkl],
-        'test': [dense_infos_val_clear_FOV3000_15.pkl],
+        'train': [dense_infos_train_all_60.pkl],
+        'test': [dense_infos_val_clear_15.pkl],
     }
 
     DATA_AUGMENTOR:
