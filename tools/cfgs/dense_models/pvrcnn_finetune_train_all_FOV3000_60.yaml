@@ -23,7 +23,7 @@ DATA_CONFIG:
         'test': [dense_infos_val_clear_FOV3000_15.pkl],
     }
 
-    FOV_POINTS_ONLY: False
+    FOV_POINTS_ONLY: True
 
     DATA_AUGMENTOR:
         DISABLE_AUG_LIST: ['placeholder']
