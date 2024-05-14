@@ -2,6 +2,8 @@ import logging
 
 import numpy as np
 import scipy.stats as stats
+import pickle
+import tqdm
 
 from skimage import io
 
